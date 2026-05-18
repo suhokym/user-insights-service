@@ -1,0 +1,77 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.5.15-SNAPSHOT'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.liveclass'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+	maven { url = 'https://repo.spring.io/snapshot' }
+}
+
+configurations {
+	// Spark가 가져오는 slf4j/log4j 충돌 제거
+	all {
+		exclude group: 'org.slf4j', module: 'slf4j-log4j12'
+		exclude group: 'log4j', module: 'log4j'
+		exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j-impl'
+	}
+}
+
+dependencies {
+	// Spring
+	implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+
+	// MySQL
+	runtimeOnly 'com.mysql:mysql-connector-j'
+
+	// Spark (local mode) - Java 21 호환을 위해 3.5.x 사용
+	implementation('org.apache.spark:spark-core_2.12:3.5.1') {
+		exclude group: 'org.apache.hadoop', module: 'hadoop-client-runtime'
+	}
+	implementation 'org.apache.spark:spark-sql_2.12:3.5.1'
+
+	// Lombok
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testCompileOnly 'org.projectlombok:lombok'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+// Java 21 + Spark 모듈 시스템 호환성
+tasks.withType(JavaExec).configureEach {
+	jvmArgs(
+		'--add-opens=java.base/java.lang=ALL-UNNAMED',
+		'--add-opens=java.base/java.util=ALL-UNNAMED',
+		'--add-opens=java.base/java.io=ALL-UNNAMED',
+		'--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+		'--add-opens=java.base/java.nio=ALL-UNNAMED'
+	)
+}
+
+bootRun {
+	jvmArgs(
+		'--add-opens=java.base/java.lang=ALL-UNNAMED',
+		'--add-opens=java.base/java.util=ALL-UNNAMED',
+		'--add-opens=java.base/java.io=ALL-UNNAMED',
+		'--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+		'--add-opens=java.base/java.nio=ALL-UNNAMED'
+	)
+}

@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: dataengineering
+
+  elasticsearch:
+    uris: http://localhost:9200
+    username: elastic
+    password: changeme
+    connection-timeout: 5s
+    socket-timeout: 30s
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/dataengineering?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: root
+    password: 1234
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+
+spark:
+  app-name: dataengineering-aggregation
+  master: local[*]
+  log-level: WARN
