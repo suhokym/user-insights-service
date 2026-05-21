@@ -8,7 +8,7 @@ import lombok.ToString;
 import java.time.LocalDateTime;
 
 /**
- * Kafka로 발행되는 사용자 행동 로그 이벤트
+ * Kafka로 asdasd발행되는 사용자 행동 로그 이벤트
  */
 @Getter
 @Builder
