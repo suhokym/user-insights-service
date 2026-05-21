@@ -194,15 +194,55 @@ docker-compose up -d
 
 ## 실행 방법
 
+**필요한 도구**
+
+| 도구 | 버전 | 설치 |
+|------|------|------|
+| Docker Desktop | 최신 버전 | https://www.docker.com/products/docker-desktop |
+
+Docker Desktop 설치 후 Settings → Resources → Memory에서 **4GB 이상** 할당을 권장합니다.
+
+**실행 순서**
+
 ```bash
-# 전체 실행 (빌드 포함)
+# 1. 저장소 클론
+git clone <repo-url>
+cd user-insights-service
+
+# 2. 전체 서비스 빌드 및 실행 (첫 실행 시 5~10분 소요)
 docker-compose up --build
 
-# event-log-service만 재빌드
+# 3. 브라우저에서 대시보드 접속
+# http://localhost:8080
+
+# 4. 우측 상단 [1주일 집계 실행] 버튼 클릭 → 날짜 선택 → 차트 확인
+```
+
+코드 수정 후 재빌드가 필요한 경우:
+
+```bash
 docker-compose up --build event-log-service
 ```
 
-실행 후 `http://localhost:8080` 접속 → **1주일 집계 실행** 버튼 클릭 → 날짜 선택 → 대시보드 확인
+## 스키마 설명
+
+원시 로그는 Elasticsearch에, 집계 결과만 MySQL에 분리 저장했습니다. Elasticsearch는 비정형 이벤트를 대량으로 빠르게 적재하는 데 적합하고, MySQL은 날짜·유입채널 단위로 집계된 소량의 결과를 API로 조회하는 데 적합하기 때문입니다.
+
+MySQL 집계 테이블은 집계 단위에 따라 3개로 분리했습니다. `aggregation_result`는 날짜 × utmMedium 단위로 전환율·구매액·체류시간을 한 행에 담고, `aggregation_traffic_result`는 시간대별 트래픽을 별도 테이블로 분리해 시계열 조회를 단순하게 유지했으며, `aggregation_click_result`는 targetId가 추가되는 클릭 패턴의 카디널리티 차이를 고려해 독립 테이블로 구성했습니다.
+
+## 구현하면서 고민한 점
+
+**Spark를 Spring Boot에 내장하는 방식 선택**
+
+별도 Spark 클러스터를 두지 않고 `local[*]` 모드로 Spring Boot에 내장했습니다. 인프라를 단순하게 유지하면서 `docker-compose up` 한 줄로 실행 가능하게 하려는 목적이었습니다. 다만 Java 21과 Spark 3.5의 모듈 시스템 충돌(`InaccessibleObjectException`) 문제가 있었고, Dockerfile ENTRYPOINT에 `--add-opens` 플래그를 13개 추가해 해결했습니다.
+
+**봇 탐지 임계값 결정**
+
+처음엔 PAGE_VIEW 60회 / PURCHASE 3회로 설정했는데, 실제 생성된 유저 데이터도 봇으로 오분류되는 문제가 생겼습니다. 봇 생성기가 세션당 60 PV를 만들지만 하루에 수십 세션을 반복해 일 4,000 PV 이상을 찍는다는 것을 확인하고, 임계값을 PAGE_VIEW 1,000 / PURCHASE 50으로 상향해 실제 유저(일 최대 139 PV)와 명확히 구분했습니다.
+
+**NULL utmMedium의 Spark JOIN 처리**
+
+직접유입(utmMedium = null)이 집계 결과에 나타나지 않는 문제가 있었습니다. Spark SQL에서 `NULL = NULL`은 `false`이므로 JOIN 키로 사용할 수 없기 때문이었습니다. DataFrame 생성 직후 `when(col("utmMedium").isNull(), "직접유입")`으로 null을 문자열로 변환해 모든 하위 집계에서 정상적으로 그룹핑되도록 수정했습니다.
 
 ## DB 접속 정보 (로컬)
 
@@ -212,3 +252,73 @@ docker-compose up --build event-log-service
 | Database | insights |
 | Username | root |
 | Password | 1234 |
+
+## AWS 아키텍처 설계
+
+```
+                        Internet
+                           │
+                     ┌─────▼─────┐
+                     │    ALB    │  (Application Load Balancer)
+                     └─────┬─────┘
+                           │ :80 / :443
+              ┌────────────▼────────────┐
+              │         VPC              │
+              │  ┌──────────────────┐   │
+              │  │  Public Subnet   │   │
+              │  └──────────────────┘   │
+              │  ┌──────────────────┐   │
+              │  │  Private Subnet  │   │
+              │  │                  │   │
+              │  │  ┌────────────┐  │   │
+              │  │  │    EKS     │  │   │
+              │  │  │  (Node)    │  │   │
+              │  │  │            │  │   │
+              │  │  │ event-log  │  │   │
+              │  │  │  -service  │  │   │
+              │  │  │  Pod × 2   │  │   │
+              │  │  └─────┬──────┘  │   │
+              │  │        │         │   │
+              │  │   ┌────┴────┐    │   │
+              │  │   │         │    │   │
+              │  │   ▼         ▼    │   │
+              │  │ Amazon    Amazon │   │
+              │  │ OpenSearch  RDS  │   │
+              │  │ Service  (MySQL) │   │
+              │  └──────────────────┘   │
+              └─────────────────────────┘
+                           │
+                     ┌─────▼─────┐
+                     │  Amazon   │
+                     │    ECR    │  (컨테이너 이미지 저장소)
+                     └───────────┘
+```
+
+| 구성 요소 | AWS 서비스 | 역할 |
+|----------|-----------|------|
+| 컨테이너 오케스트레이션 | Amazon EKS | event-log-service Pod 실행 |
+| 로드 밸런서 | Application Load Balancer | 외부 트래픽 → EKS 분산 |
+| 이벤트 로그 저장소 | Amazon OpenSearch Service | Elasticsearch 대체 (관리형) |
+| 집계 결과 DB | Amazon RDS (MySQL 8.0) | 가용성·백업 자동 관리 |
+| 컨테이너 이미지 | Amazon ECR | Docker 이미지 저장 및 배포 |
+| 네트워크 | VPC + Private Subnet | EKS·RDS·OpenSearch 외부 노출 차단 |
+
+## Kubernetes 리소스
+
+`k8s/` 디렉토리에 EKS 배포용 리소스 파일이 있습니다.
+
+```
+k8s/
+├── deployment.yaml   # Pod 스펙 및 환경변수
+├── service.yaml      # 클러스터 내부 네트워크 노출
+└── configmap.yaml    # 비민감 환경변수
+```
+
+```bash
+# 배포
+kubectl apply -f k8s/
+
+# 상태 확인
+kubectl get pods
+kubectl get svc
+```

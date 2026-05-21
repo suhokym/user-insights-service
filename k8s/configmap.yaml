@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: event-log-service-config
+data:
+  SPRING_ELASTICSEARCH_URIS: "http://opensearch:9200"
+  SPRING_DATASOURCE_URL: "jdbc:mysql://rds-endpoint:3306/insights?useSSL=true&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useUnicode=true"
+  SPRING_DATASOURCE_USERNAME: "root"
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "update"
