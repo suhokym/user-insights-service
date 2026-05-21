@@ -255,43 +255,25 @@ MySQL 집계 테이블은 집계 단위에 따라 3개로 분리했습니다. `a
 
 ## AWS 아키텍처 설계
 
-```
-                        Internet
-                           │
-                     ┌─────▼─────┐
-                     │    ALB    │  (Application Load Balancer)
-                     └─────┬─────┘
-                           │ :80 / :443
-              ┌────────────▼────────────┐
-              │         VPC              │
-              │  ┌──────────────────┐   │
-              │  │  Public Subnet   │   │
-              │  └──────────────────┘   │
-              │  ┌──────────────────┐   │
-              │  │  Private Subnet  │   │
-              │  │                  │   │
-              │  │  ┌────────────┐  │   │
-              │  │  │    EKS     │  │   │
-              │  │  │  (Node)    │  │   │
-              │  │  │            │  │   │
-              │  │  │ event-log  │  │   │
-              │  │  │  -service  │  │   │
-              │  │  │  Pod × 2   │  │   │
-              │  │  └─────┬──────┘  │   │
-              │  │        │         │   │
-              │  │   ┌────┴────┐    │   │
-              │  │   │         │    │   │
-              │  │   ▼         ▼    │   │
-              │  │ Amazon    Amazon │   │
-              │  │ OpenSearch  RDS  │   │
-              │  │ Service  (MySQL) │   │
-              │  └──────────────────┘   │
-              └─────────────────────────┘
-                           │
-                     ┌─────▼─────┐
-                     │  Amazon   │
-                     │    ECR    │  (컨테이너 이미지 저장소)
-                     └───────────┘
+```mermaid
+graph TD
+    Internet(["Internet"]) --> ALB["ALB\n(Application Load Balancer)\n:80 / :443"]
+
+    subgraph VPC["VPC"]
+        subgraph Public["Public Subnet"]
+            ALB
+        end
+        subgraph Private["Private Subnet"]
+            EKS["EKS Node\nevent-log-service Pod × 2"]
+            OS["Amazon OpenSearch Service\n(Elasticsearch 대체)"]
+            RDS["Amazon RDS\nMySQL 8.0"]
+        end
+    end
+
+    ALB --> EKS
+    EKS --> OS
+    EKS --> RDS
+    ECR["Amazon ECR\n(컨테이너 이미지 저장소)"] -. "image pull" .-> EKS
 ```
 
 | 구성 요소 | AWS 서비스 | 역할 |
@@ -309,16 +291,34 @@ MySQL 집계 테이블은 집계 단위에 따라 3개로 분리했습니다. `a
 
 ```
 k8s/
-├── deployment.yaml   # Pod 스펙 및 환경변수
-├── service.yaml      # 클러스터 내부 네트워크 노출
-└── configmap.yaml    # 비민감 환경변수
+├── userweblog-generator-deployment.yaml   # 이벤트 생성기 Pod 스펙
+├── userweblog-generator-configmap.yaml    # 이벤트 생성기 환경변수
+├── deployment.yaml                        # event-log-service Pod 스펙
+├── service.yaml                           # event-log-service 네트워크 노출
+└── configmap.yaml                         # event-log-service 환경변수
 ```
 
 ```bash
-# 배포
+# 전체 배포
 kubectl apply -f k8s/
 
 # 상태 확인
 kubectl get pods
 kubectl get svc
 ```
+
+### 선택한 Kubernetes 리소스의 역할
+
+**Deployment**
+
+Pod의 생성·삭제·재시작을 선언적으로 관리하는 리소스입니다. `replicas` 수만큼 Pod를 항상 유지하며, Pod가 비정상 종료되면 자동으로 새 Pod를 띄웁니다. userweblog-generator는 `replicas: 1`로 설정해 중복 이벤트 생성을 방지하면서도 장애 시 자동 복구가 되도록 했습니다.
+
+**ConfigMap**
+
+ES URI, 이벤트 생성 건수, 스케줄러 활성화 여부 등 환경별로 달라지는 설정값을 컨테이너 이미지와 분리해 저장하는 리소스입니다. 값을 바꿀 때 이미지를 재빌드할 필요 없이 ConfigMap만 수정하고 Pod를 재시작하면 됩니다.
+
+### Kubernetes 리소스를 선택한 이유
+
+userweblog-generator는 시작 시 과거 7일치 이벤트를 일괄 생성하고, 이후 스케줄러로 실시간 이벤트를 지속적으로 발행하는 **장기 실행 프로세스**입니다. 한 번 실행하고 종료되는 Job이 아니라 항상 살아있어야 하므로 Deployment를 선택했습니다.
+
+ConfigMap은 Elasticsearch 엔드포인트나 생성 파라미터가 환경(로컬·스테이징·프로덕션)마다 다를 수 있기 때문에 선택했습니다. 설정을 이미지에 하드코딩하면 환경마다 이미지를 따로 빌드해야 하지만, ConfigMap으로 분리하면 같은 이미지를 재사용하면서 설정만 교체할 수 있습니다.

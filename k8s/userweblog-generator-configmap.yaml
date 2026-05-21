@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: userweblog-generator-config
+data:
+  SPRING_ELASTICSEARCH_URIS: "http://opensearch:9200"
+  GENERATOR_BULK_DAYS: "7"
+  GENERATOR_BULK_TOTAL_COUNT: "100000"
+  GENERATOR_BULK_BATCH_SIZE: "5000"
+  GENERATOR_SCHEDULER_ENABLED: "true"
+  GENERATOR_SCHEDULER_USERS_PER_TICK: "1000"
