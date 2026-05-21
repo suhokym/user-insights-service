@@ -283,38 +283,6 @@ MySQL 집계 테이블은 집계 단위에 따라 3개로 분리했습니다. `a
 ![대시보드 중단](docs/images/dashboard-2.png)
 ![대시보드 하단](docs/images/dashboard-3.png)
 
-## AWS 아키텍처 설계
-
-```mermaid
-graph TD
-    Internet(["Internet"]) --> ALB["ALB\n(Application Load Balancer)\n:80 / :443"]
-
-    subgraph VPC["VPC"]
-        subgraph Public["Public Subnet"]
-            ALB
-        end
-        subgraph Private["Private Subnet"]
-            EKS["EKS Node\nevent-log-service Pod × 2"]
-            OS["Amazon OpenSearch Service\n(Elasticsearch 대체)"]
-            RDS["Amazon RDS\nMySQL 8.0"]
-        end
-    end
-
-    ALB --> EKS
-    EKS --> OS
-    EKS --> RDS
-    ECR["Amazon ECR\n(컨테이너 이미지 저장소)"] -. "image pull" .-> EKS
-```
-
-| 구성 요소 | AWS 서비스 | 역할 |
-|----------|-----------|------|
-| 컨테이너 오케스트레이션 | Amazon EKS | event-log-service Pod 실행 |
-| 로드 밸런서 | Application Load Balancer | 외부 트래픽 → EKS 분산 |
-| 이벤트 로그 저장소 | Amazon OpenSearch Service | Elasticsearch 대체 (관리형) |
-| 집계 결과 DB | Amazon RDS (MySQL 8.0) | 가용성·백업 자동 관리 |
-| 컨테이너 이미지 | Amazon ECR | Docker 이미지 저장 및 배포 |
-| 네트워크 | VPC + Private Subnet | EKS·RDS·OpenSearch 외부 노출 차단 |
-
 ## Kubernetes 리소스
 
 `k8s/` 디렉토리에 EKS 배포용 리소스 파일이 있습니다.
@@ -352,3 +320,35 @@ ES URI, 이벤트 생성 건수, 스케줄러 활성화 여부 등 환경별로 
 userweblog-generator는 시작 시 과거 7일치 이벤트를 일괄 생성하고, 이후 스케줄러로 실시간 이벤트를 지속적으로 발행하는 **장기 실행 프로세스**입니다. 한 번 실행하고 종료되는 Job이 아니라 항상 살아있어야 하므로 Deployment를 선택했습니다.
 
 ConfigMap은 Elasticsearch 엔드포인트나 생성 파라미터가 환경(로컬·스테이징·프로덕션)마다 다를 수 있기 때문에 선택했습니다. 설정을 이미지에 하드코딩하면 환경마다 이미지를 따로 빌드해야 하지만, ConfigMap으로 분리하면 같은 이미지를 재사용하면서 설정만 교체할 수 있습니다.
+
+## AWS 아키텍처 설계
+
+```mermaid
+graph TD
+    Internet(["Internet"]) --> ALB["ALB\n(Application Load Balancer)\n:80 / :443"]
+
+    subgraph VPC["VPC"]
+        subgraph Public["Public Subnet"]
+            ALB
+        end
+        subgraph Private["Private Subnet"]
+            EKS["EKS Node\nevent-log-service Pod × 2"]
+            OS["Amazon OpenSearch Service\n(Elasticsearch 대체)"]
+            RDS["Amazon RDS\nMySQL 8.0"]
+        end
+    end
+
+    ALB --> EKS
+    EKS --> OS
+    EKS --> RDS
+    ECR["Amazon ECR\n(컨테이너 이미지 저장소)"] -. "image pull" .-> EKS
+```
+
+| 구성 요소 | AWS 서비스 | 역할 |
+|----------|-----------|------|
+| 컨테이너 오케스트레이션 | Amazon EKS | event-log-service Pod 실행 |
+| 로드 밸런서 | Application Load Balancer | 외부 트래픽 → EKS 분산 |
+| 이벤트 로그 저장소 | Amazon OpenSearch Service | Elasticsearch 대체 (관리형) |
+| 집계 결과 DB | Amazon RDS (MySQL 8.0) | 가용성·백업 자동 관리 |
+| 컨테이너 이미지 | Amazon ECR | Docker 이미지 저장 및 배포 |
+| 네트워크 | VPC + Private Subnet | EKS·RDS·OpenSearch 외부 노출 차단 |
