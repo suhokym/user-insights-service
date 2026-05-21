@@ -264,10 +264,6 @@ MySQL 집계 테이블은 집계 단위에 따라 3개로 분리했습니다. `a
 
 Elasticsearch에서 분석한 결과를 그대로 NoSQL에 저장하거나 파일로 내보내는 방식도 고려했습니다. 하지만 집계 결과는 날짜·유입채널 단위로 구조가 명확하게 정해져 있어, MySQL에 정규화된 형태로 저장하면 API 조회와 대시보드 연동이 훨씬 단순해진다고 판단했습니다. 비정형 원시 로그는 Elasticsearch에, 정형화된 집계 결과는 MySQL에 분리 저장하는 구조로 결정했습니다.
 
-**Elasticsearch 컨테이너 호스트명 문제**
-
-`docker-compose up` 실행 시 Elasticsearch가 `ERROR: Elasticsearch died while starting up, with exit code 1`으로 죽는 문제가 있었습니다. 원인은 Docker가 컨테이너 ID(`44b9a49d0c2d`)를 호스트명으로 할당하는데, 이 값이 DNS에 등록되지 않아 log4j2가 로깅 설정 중 `InetAddress.getLocalHost()`를 호출할 때 `UnknownHostException`이 발생한 것이었습니다. `docker-compose.yml`의 Elasticsearch 서비스에 `hostname: elasticsearch`를 명시해 Docker 내부 DNS로 정상 조회되도록 해결했습니다.
-
 ## DB 접속 정보 (로컬)
 
 | 항목 | 값 |
