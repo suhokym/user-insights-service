@@ -277,6 +277,12 @@ MySQL 집계 테이블은 집계 단위에 따라 3개로 분리했습니다. `a
 | Username | root |
 | Password | 1234 |
 
+## 대시보드 시각화
+
+![대시보드 상단](docs/images/시각화%20이미지1.png)
+![대시보드 중단](docs/images/시각화%20이미지2.png)
+![대시보드 하단](docs/images/시각화%20이미지3.png)
+
 ## AWS 아키텍처 설계
 
 ```mermaid
