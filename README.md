@@ -256,17 +256,17 @@ MySQL 집계 테이블은 집계 단위에 따라 3개로 분리했습니다. `a
 
 ## 구현하면서 고민한 점
 
-**Spark를 Spring Boot에 내장하는 방식 선택**
+**봇/DDoS 탐지 방식 결정**
 
-별도 Spark 클러스터를 두지 않고 `local[*]` 모드로 Spring Boot에 내장했습니다. 인프라를 단순하게 유지하면서 `docker-compose up` 한 줄로 실행 가능하게 하려는 목적이었습니다. 다만 Java 21과 Spark 3.5의 모듈 시스템 충돌(`InaccessibleObjectException`) 문제가 있었고, Dockerfile ENTRYPOINT에 `--add-opens` 플래그를 13개 추가해 해결했습니다.
+처음에는 서버 에러 로그를 감지하는 방향을 고려했지만, 실제 서비스에서 서버가 다운되는 주된 원인은 해킹에 의한 비정상 트래픽이라는 점에 집중했습니다. Apache Flink를 이용해 실시간으로 악성 IP를 탐지하고 즉시 차단하는 방식도 검토했지만, 본 프로젝트는 7일치 로그를 일괄로 수집하는 배치 구조이므로 실시간 차단보다는 집계 전 단계에서 비정상 IP를 탐지해 분석 대상에서 제외하는 방식을 선택했습니다.
 
-**봇 탐지 임계값 결정**
+**집계 결과 저장 방식 결정**
 
-처음엔 PAGE_VIEW 60회 / PURCHASE 3회로 설정했는데, 실제 생성된 유저 데이터도 봇으로 오분류되는 문제가 생겼습니다. 봇 생성기가 세션당 60 PV를 만들지만 하루에 수십 세션을 반복해 일 4,000 PV 이상을 찍는다는 것을 확인하고, 임계값을 PAGE_VIEW 1,000 / PURCHASE 50으로 상향해 실제 유저(일 최대 139 PV)와 명확히 구분했습니다.
+Elasticsearch에서 분석한 결과를 그대로 NoSQL에 저장하거나 파일로 내보내는 방식도 고려했습니다. 하지만 집계 결과는 날짜·유입채널 단위로 구조가 명확하게 정해져 있어, MySQL에 정규화된 형태로 저장하면 API 조회와 대시보드 연동이 훨씬 단순해진다고 판단했습니다. 비정형 원시 로그는 Elasticsearch에, 정형화된 집계 결과는 MySQL에 분리 저장하는 구조로 결정했습니다.
 
-**NULL utmMedium의 Spark JOIN 처리**
+**Elasticsearch 컨테이너 호스트명 문제**
 
-직접유입(utmMedium = null)이 집계 결과에 나타나지 않는 문제가 있었습니다. Spark SQL에서 `NULL = NULL`은 `false`이므로 JOIN 키로 사용할 수 없기 때문이었습니다. DataFrame 생성 직후 `when(col("utmMedium").isNull(), "직접유입")`으로 null을 문자열로 변환해 모든 하위 집계에서 정상적으로 그룹핑되도록 수정했습니다.
+`docker-compose up` 실행 시 Elasticsearch가 `ERROR: Elasticsearch died while starting up, with exit code 1`으로 죽는 문제가 있었습니다. 원인은 Docker가 컨테이너 ID(`44b9a49d0c2d`)를 호스트명으로 할당하는데, 이 값이 DNS에 등록되지 않아 log4j2가 로깅 설정 중 `InetAddress.getLocalHost()`를 호출할 때 `UnknownHostException`이 발생한 것이었습니다. `docker-compose.yml`의 Elasticsearch 서비스에 `hostname: elasticsearch`를 명시해 Docker 내부 DNS로 정상 조회되도록 해결했습니다.
 
 ## DB 접속 정보 (로컬)
 
