@@ -1,15 +1,17 @@
-package com.liveclass.dataengineering.domain.mysql;
+package com.liveclass.insights.domain.mysql;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 
 @Getter
+@Setter
 @NoArgsConstructor
 @Entity
+@Builder
+@AllArgsConstructor
 @Table(
         name = "aggregation_traffic_result"
 )
@@ -23,13 +25,12 @@ public class AggregationTrafficHitResult {
 
     //일별 집계
     @Column(name = "agg_date", nullable = false)
-    private LocalDate agg_date;
+    private LocalDate aggDate;
 
-    @Column(name = "agg_time", nullable = false)
-    private LocalTime aggTime;
+    /** 집계 시간 (0~23) */
+    @Column(name = "hour", nullable = false)
+    private Integer hour;
 
-    /** 시간별 트래픽 히트 건수 */
-    private Long trafficCount;
 
     /** 전체 이벤트 발생 건수 */
     @Column(nullable = false)

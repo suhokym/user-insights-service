@@ -1,10 +1,10 @@
-package com.liveclass.dataengineering;
+package com.liveclass.insights;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class DataengineeringApplicationTests {
+class InsightsApplicationTests {
 
 	@Test
 	void contextLoads() {

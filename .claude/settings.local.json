@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker-compose up *)",
+      "Bash(docker-compose logs *)",
+      "Bash(Select-String -Pattern \"ERROR|Exception|error\")",
+      "Bash(Select-Object -First 20)",
+      "Bash(grep -v \"^$\")",
+      "Bash(curl -s -X POST http://localhost:8080/api/aggregation/week -w \"\\\\nHTTP Status: %{http_code}\")",
+      "Bash(ls C:/projects/)",
+      "Bash(Get-ChildItem -Path \"C:\\\\projects\\\\user-insights-service\" -Directory)",
+      "Bash(Select-Object Name)"
+    ]
+  }
+}

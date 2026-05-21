@@ -1,7 +1,10 @@
-package com.liveclass.dataengineering.domain.es;
+package com.liveclass.insights.domain.es;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.DateFormat;
 import org.springframework.data.elasticsearch.annotations.Document;
@@ -13,6 +16,9 @@ import java.time.LocalDateTime;
 @Document(indexName = "userweblog-events")
 @Getter
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class UserWebLogDocument {
 
     @Id

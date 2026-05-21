@@ -1,4 +1,4 @@
-package com.liveclass.dataengineering.config;
+package com.liveclass.insights.config;
 
 import org.apache.spark.sql.SparkSession;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,20 +14,23 @@ public class SparkConfig {
     @Value("${spark.master}")
     private String master;
 
-    @Value("${spark.log-level:WARN}")
-    private String logLevel;
-
     @Bean(destroyMethod = "close")
     public SparkSession sparkSession() {
-        SparkSession session = SparkSession.builder()
+        System.setProperty("io.netty.tryReflectionSetAccessible", "true");
+        System.setProperty("hadoop.home.dir", "/");
+
+        return SparkSession.builder()
                 .appName(appName)
                 .master(master)
                 .config("spark.sql.session.timeZone", "Asia/Seoul")
                 .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
                 .config("spark.ui.enabled", "false")
+                .config("spark.driver.extraJavaOptions",
+                        "--add-exports java.base/sun.nio.ch=ALL-UNNAMED " +
+                                "--add-opens java.base/sun.nio.ch=ALL-UNNAMED " +
+                                "--add-opens java.base/java.lang=ALL-UNNAMED " +
+                                "--add-opens java.base/java.nio=ALL-UNNAMED " +
+                                "--add-opens java.base/java.util=ALL-UNNAMED")
                 .getOrCreate();
-
-        session.sparkContext().setLogLevel(logLevel);
-        return session;
     }
 }

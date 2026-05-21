@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>User Insights Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f1117; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 28px; background: #1a1d27; border-bottom: 1px solid #2e3044;
+  }
+  header h1 { font-size: 18px; font-weight: 600; color: #fff; letter-spacing: .5px; }
+  .header-controls { display: flex; gap: 12px; align-items: center; }
+
+  select, button {
+    padding: 8px 16px; border-radius: 6px; border: 1px solid #3a3d55;
+    background: #252838; color: #e0e0e0; font-size: 13px; cursor: pointer;
+  }
+  button.primary { background: #4f6ef7; border-color: #4f6ef7; color: #fff; font-weight: 600; }
+  button.primary:hover { background: #3d5ce5; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .status { font-size: 12px; color: #888; }
+  .status.ok { color: #4caf50; }
+  .status.err { color: #f44336; }
+  .status.loading { color: #4f6ef7; }
+
+  .kpi-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    padding: 20px 28px 0;
+  }
+  .kpi {
+    background: #1a1d27; border: 1px solid #2e3044; border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .kpi .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .8px; }
+  .kpi .value { font-size: 28px; font-weight: 700; color: #fff; margin-top: 6px; }
+  .kpi .sub { font-size: 11px; color: #666; margin-top: 4px; }
+
+  .charts-grid {
+    display: grid; grid-template-columns: 1fr; gap: 16px;
+    padding: 16px 28px;
+  }
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .chart-card {
+    background: #1a1d27; border: 1px solid #2e3044; border-radius: 10px;
+    padding: 20px;
+  }
+  .chart-card.full { grid-column: 1 / -1; }
+  .chart-card h3 { font-size: 13px; color: #aaa; margin-bottom: 16px; font-weight: 500; }
+  .chart-wrap { position: relative; height: 220px; }
+  .empty { text-align: center; color: #555; font-size: 13px; padding: 60px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>User Insights Dashboard</h1>
+  <div class="header-controls">
+    <span id="statusMsg" class="status"></span>
+    <select id="dateSelect" onchange="loadDashboard()"><option value="">날짜 선택</option></select>
+    <button class="primary" id="aggBtn" onclick="runAggregation()">1주일 집계 실행</button>
+  </div>
+</header>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="label">총 이벤트</div><div class="value" id="kpiTotal">-</div><div class="sub">선택 날짜 전체</div></div>
+  <div class="kpi"><div class="label">구매 건수</div><div class="value" id="kpiPurchase">-</div><div class="sub">PURCHASE 이벤트</div></div>
+  <div class="kpi"><div class="label">평균 전환율</div><div class="value" id="kpiConv">-</div><div class="sub">유입채널 평균</div></div>
+  <div class="kpi"><div class="label">총 구매액</div><div class="value" id="kpiAmount">-</div><div class="sub">원</div></div>
+</div>
+
+<div class="charts-grid">
+  <div class="chart-card full">
+    <h3>시간대별 트래픽</h3>
+    <div class="chart-wrap"><canvas id="trafficChart"></canvas></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-card">
+      <h3>유입 채널별 트래픽</h3>
+      <div class="chart-wrap"><canvas id="utmTrafficChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>유입 채널별 전환율 (%)</h3>
+      <div class="chart-wrap"><canvas id="convChart"></canvas></div>
+    </div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-card">
+      <h3>유입 채널별 구매액</h3>
+      <div class="chart-wrap"><canvas id="amountChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>유입 채널별 평균 체류시간 (초)</h3>
+      <div class="chart-wrap"><canvas id="durationChart"></canvas></div>
+    </div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-card full">
+      <h3>TOP 클릭 요소 (상위 10)</h3>
+      <div class="chart-wrap"><canvas id="clickChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const COLORS = ['#4f6ef7','#f97316','#22d3ee','#a78bfa','#34d399','#fb7185','#fbbf24','#60a5fa'];
+let charts = {};
+
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+function makeChart(id, type, labels, datasets, opts = {}) {
+  destroyChart(id);
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, {
+    type,
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#aaa', font: { size: 11 } } } },
+      scales: type === 'doughnut' ? {} : {
+        x: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#2e3044' } },
+        y: { ticks: { color: '#888', font: { size: 11 } }, grid: { color: '#2e3044' } }
+      },
+      ...opts
+    }
+  });
+}
+
+async function loadDates() {
+  try {
+    const res = await fetch('/api/aggregation/dates');
+    const dates = await res.json();
+    const sel = document.getElementById('dateSelect');
+    sel.innerHTML = '<option value="">날짜 선택</option>';
+    dates.forEach(d => sel.innerHTML += `<option value="${d}">${d}</option>`);
+    if (dates.length > 0) { sel.value = dates[0]; loadDashboard(); }
+  } catch(e) { console.error(e); }
+}
+
+async function loadDashboard() {
+  const date = document.getElementById('dateSelect').value;
+  if (!date) return;
+  setStatus('loading', '로딩 중...');
+  try {
+    const res = await fetch(`/api/aggregation/dashboard?date=${date}`);
+    const data = await res.json();
+    renderKpi(data.aggregation);
+    renderTraffic(data.traffic);
+    renderUtmCharts(data.aggregation);
+    renderClicks(data.clicks);
+    setStatus('', '');
+  } catch(e) { setStatus('err', '데이터 로드 실패'); }
+}
+
+function renderKpi(agg) {
+  if (!agg || agg.length === 0) {
+    ['kpiTotal','kpiPurchase','kpiConv','kpiAmount'].forEach(id => document.getElementById(id).textContent = '-');
+    return;
+  }
+  const total    = agg.reduce((s, r) => s + (r.totalCount || 0), 0);
+  const purchase = agg.reduce((s, r) => s + (r.purchaseCount || 0), 0);
+  const conv     = agg.reduce((s, r) => s + parseFloat(r.conversionRate || 0), 0) / agg.length;
+  const amount   = agg.reduce((s, r) => s + (r.totalAmount || 0), 0);
+  document.getElementById('kpiTotal').textContent    = total.toLocaleString();
+  document.getElementById('kpiPurchase').textContent = purchase.toLocaleString();
+  document.getElementById('kpiConv').textContent     = conv.toFixed(2) + '%';
+  document.getElementById('kpiAmount').textContent   = amount.toLocaleString();
+}
+
+function renderTraffic(traffic) {
+  if (!traffic || traffic.length === 0) return;
+  const labels = Array.from({length: 24}, (_, i) => i + '시');
+  const counts = Array(24).fill(0);
+  traffic.forEach(t => { counts[t.hour] = t.totalCount; });
+  makeChart('trafficChart', 'line', labels, [{
+    label: '이벤트 수', data: counts,
+    borderColor: '#4f6ef7', backgroundColor: 'rgba(79,110,247,.15)',
+    fill: true, tension: .4, pointRadius: 3
+  }]);
+}
+
+function renderUtmCharts(agg) {
+  if (!agg || agg.length === 0) return;
+  const labels  = agg.map(r => r.utmMedium || '직접유입');
+  const traffic = agg.map(r => r.totalCount);
+  const conv    = agg.map(r => parseFloat(r.conversionRate || 0));
+  const amount  = agg.map(r => r.totalAmount);
+
+  makeChart('utmTrafficChart', 'bar', labels, [{
+    label: '총 이벤트', data: traffic,
+    backgroundColor: COLORS.slice(0, labels.length)
+  }], { plugins: { legend: { display: false } } });
+
+  makeChart('convChart', 'bar', labels, [{
+    label: '전환율 (%)', data: conv,
+    backgroundColor: COLORS.slice(0, labels.length).map(c => c + 'cc')
+  }], { plugins: { legend: { display: false } } });
+
+  makeChart('amountChart', 'bar', labels, [{
+    label: '구매액 (원)', data: amount,
+    backgroundColor: '#34d39966'
+  }], { plugins: { legend: { display: false } } });
+
+  const duration = agg.map(r => r.avgDurationSeconds || 0);
+  makeChart('durationChart', 'bar', labels, [{
+    label: '평균 체류시간 (초)', data: duration,
+    backgroundColor: '#a78bfa66'
+  }], { plugins: { legend: { display: false } } });
+}
+
+function renderClicks(clicks) {
+  if (!clicks || clicks.length === 0) return;
+  const top = clicks.slice(0, 10);
+  const labels = top.map(c => (c.utmMedium || '직접') + ' / ' + c.targetId);
+  makeChart('clickChart', 'bar', labels, [{
+    label: '클릭 수', data: top.map(c => c.clickCount),
+    backgroundColor: '#f9731666'
+  }], {
+    indexAxis: 'y',
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#888', font: { size: 10 } }, grid: { color: '#2e3044' } },
+      y: { ticks: { color: '#888', font: { size: 10 } }, grid: { color: '#2e3044' } }
+    }
+  });
+}
+
+async function runAggregation() {
+  const btn = document.getElementById('aggBtn');
+  btn.disabled = true;
+  setStatus('loading', '집계 중... (수십 초 소요)');
+  try {
+    const res = await fetch('/api/aggregation/week', { method: 'POST' });
+    if (res.ok) {
+      setStatus('ok', '집계 완료');
+      await loadDates();
+    } else {
+      setStatus('err', '집계 실패: ' + await res.text());
+    }
+  } catch(e) {
+    setStatus('err', '서버 연결 실패');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function setStatus(type, msg) {
+  const el = document.getElementById('statusMsg');
+  el.className = 'status' + (type ? ' ' + type : '');
+  el.textContent = msg;
+}
+
+loadDates();
+</script>
+</body>
+</html>

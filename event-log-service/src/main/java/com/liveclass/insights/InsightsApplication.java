@@ -1,13 +1,13 @@
-package com.liveclass.dataengineering;
+package com.liveclass.insights;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class DataengineeringApplication {
+public class InsightsApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(DataengineeringApplication.class, args);
+		SpringApplication.run(InsightsApplication.class, args);
 	}
 
 }

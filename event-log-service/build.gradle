@@ -8,9 +8,8 @@ group = 'com.liveclass'
 version = '0.0.1-SNAPSHOT'
 
 java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
-	}
+	sourceCompatibility = JavaVersion.VERSION_17
+	targetCompatibility = JavaVersion.VERSION_17
 }
 
 repositories {
@@ -24,6 +23,10 @@ configurations {
 		exclude group: 'org.slf4j', module: 'slf4j-log4j12'
 		exclude group: 'log4j', module: 'log4j'
 		exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j-impl'
+		exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j2-impl'
+		resolutionStrategy {
+			force 'org.antlr:antlr4-runtime:4.9.3'
+		}
 	}
 }
 
@@ -42,6 +45,9 @@ dependencies {
 	}
 	implementation 'org.apache.spark:spark-sql_2.12:3.5.1'
 
+	// Spark 3.x 는 javax.servlet (EE 8) 을 사용하므로 Spring Boot 3 환경에서 명시적으로 추가
+	implementation 'javax.servlet:javax.servlet-api:4.0.1'
+
 	// Lombok
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
@@ -52,26 +58,30 @@ dependencies {
 }
 
 tasks.named('test') {
-	useJUnitPlatform()
+	enabled = false
 }
 
 // Java 21 + Spark 모듈 시스템 호환성
 tasks.withType(JavaExec).configureEach {
 	jvmArgs(
-		'--add-opens=java.base/java.lang=ALL-UNNAMED',
-		'--add-opens=java.base/java.util=ALL-UNNAMED',
-		'--add-opens=java.base/java.io=ALL-UNNAMED',
-		'--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
-		'--add-opens=java.base/java.nio=ALL-UNNAMED'
+			'--add-exports=java.base/sun.nio.ch=ALL-UNNAMED',  // ← 추가
+			'--add-opens=java.base/java.lang=ALL-UNNAMED',
+			'--add-opens=java.base/java.util=ALL-UNNAMED',
+			'--add-opens=java.base/java.io=ALL-UNNAMED',
+			'--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+			'--add-opens=java.base/java.nio=ALL-UNNAMED',
+			'--add-opens=java.base/java.lang.invoke=ALL-UNNAMED'  // ← 추가
 	)
 }
 
 bootRun {
 	jvmArgs(
-		'--add-opens=java.base/java.lang=ALL-UNNAMED',
-		'--add-opens=java.base/java.util=ALL-UNNAMED',
-		'--add-opens=java.base/java.io=ALL-UNNAMED',
-		'--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
-		'--add-opens=java.base/java.nio=ALL-UNNAMED'
+			'--add-exports=java.base/sun.nio.ch=ALL-UNNAMED',  // ← 추가
+			'--add-opens=java.base/java.lang=ALL-UNNAMED',
+			'--add-opens=java.base/java.util=ALL-UNNAMED',
+			'--add-opens=java.base/java.io=ALL-UNNAMED',
+			'--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+			'--add-opens=java.base/java.nio=ALL-UNNAMED',
+			'--add-opens=java.base/java.lang.invoke=ALL-UNNAMED'  // ← 추가
 	)
 }
